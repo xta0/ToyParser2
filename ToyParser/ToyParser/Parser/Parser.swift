@@ -19,7 +19,6 @@ final class Parser: ObservableObject {
 
   @discardableResult
   func parse(_ input: String) throws  -> Program? {
-    print("Parsing: \(input)")
     self.string = input
     self.tokenizer.initialize(input)
     do {
@@ -110,33 +109,6 @@ extension Parser {
     }
   }
 
-  // EmptyStatement
-  //   : ;
-  //   ;
-  private func emptyStatement() throws -> EmptyStatement {
-    try eat(.SEMICOLON)
-    return EmptyStatement()
-  }
-
-  // BlockStatement
-  //   : { OptBlockStatement }
-  //   ;
-  private func blockStatement() throws -> BlockStatement {
-    try eat(.LEFT_CURLY_BRACE)
-
-    let body: [Statement]
-    if lookahead?.type != .RIGHT_CURLY_BRACE {
-      // Recursive Parsing (e.g. nested blocks)
-      body = try statementList(stopTokenType: .RIGHT_CURLY_BRACE)
-    } else {
-      body = []
-    }
-
-    try eat(.RIGHT_CURLY_BRACE)
-
-    return BlockStatement(body: body)
-  }
-
   // ExpressionStatement
   //   : Expression ; // expression ends with ";"
   //   ;
@@ -146,11 +118,42 @@ extension Parser {
     return ExpressionStatement(value: expr)
   }
 
-  /// Expression
-  ///   : Literal
-  ///   ;
+  // Expression
+  //   : Literal
+  //   : Binary Expression
+  //   ;
   private func expression() throws -> Expression {
-      try literal()
+      try additiveExpression()
+  }
+
+  // AdditiveExpression
+  //   : Literal
+  //   | AdditiveExpression ADDITIVE_OPERATOR Literal (left recursive rule)
+  //   ;
+  //
+  // Left recursive:
+  //
+  // AdditiveExpression → AdditiveExpression ADDITIVE_OPERATOR Literal
+  // Literal ADDITIVE_OPERATOR Literal
+  // Literal ADDITIVE_OPERATOR Literal ADDITIVE_OPERATOR Literal
+  // ...
+  private func additiveExpression() throws -> Expression {
+    // left: Expression
+    // right: Expression
+    var left = try literal()
+    while (self.lookahead?.type == .ADD) {
+      let operatorValue = try eat(.ADD).value
+      let right = try literal()
+      left = .binaryExpression(
+        BinaryExpression(
+          operatorValue: operatorValue,
+          left: left,
+          right: right
+        )
+      )
+    }
+
+    return left
   }
 
   /// Literal
@@ -186,6 +189,33 @@ extension Parser {
   private func stringLiteral() throws -> StringLiteral {
       let token = try eat(.STRING)
       return StringLiteral(value: String(token.value.dropFirst().dropLast()))
+  }
+
+  // BlockStatement
+  //   : { OptBlockStatement }
+  //   ;
+  private func blockStatement() throws -> BlockStatement {
+    try eat(.LEFT_CURLY_BRACE)
+
+    let body: [Statement]
+    if lookahead?.type != .RIGHT_CURLY_BRACE {
+      // Recursive Parsing (e.g. nested blocks)
+      body = try statementList(stopTokenType: .RIGHT_CURLY_BRACE)
+    } else {
+      body = []
+    }
+
+    try eat(.RIGHT_CURLY_BRACE)
+
+    return BlockStatement(body: body)
+  }
+
+  // EmptyStatement
+  //   : ;
+  //   ;
+  private func emptyStatement() throws -> EmptyStatement {
+    try eat(.SEMICOLON)
+    return EmptyStatement()
   }
 
 }

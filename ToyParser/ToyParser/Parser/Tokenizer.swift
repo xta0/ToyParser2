@@ -35,9 +35,10 @@ final class Tokenizer {
     }
 
     let remaining = String(input[cursor...])
+    print("remaining: \(remaining)")
 
     // match the next token
-    for spec in Lexer.specs {
+    for spec in Token.specs {
       if let tokenValue = match(spec.regex, in: remaining) {
         // advance the curor
         cursor = self.input.index(cursor, offsetBy: tokenValue.count)
@@ -62,6 +63,7 @@ final class Tokenizer {
 
 
   private func match(_ regex: Regex<Substring>, in input: String) -> String? {
+    // eager matching: return the first match result
     guard let result = input.firstMatch(of: regex) else {
       return nil
     }

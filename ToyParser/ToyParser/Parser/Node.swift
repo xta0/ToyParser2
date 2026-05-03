@@ -26,6 +26,8 @@ protocol ASTNode: Encodable {
   var type: String { get }
 }
 
+// MARK: Literal Expression
+
 struct NumericLiteral: ASTNode {
   let type = "NumericLiteral"
   let value: Double
@@ -36,18 +38,30 @@ struct StringLiteral: ASTNode {
   let value: String
 }
 
-enum Expression: ASTNode {
+// MARK: Math Expression
+
+struct BinaryExpression: ASTNode {
+  let type = "BinaryExpression"
+  let operatorValue: String
+  let left: Expression
+  let right: Expression
+}
+
+indirect enum Expression: ASTNode {
   var type: String {
     switch self {
     case let .numericLiteral(num):
       return num.type
     case let .stringLiteral(str):
       return str.type
+    case let .binaryExpression(exp):
+      return exp.type
     }
   }
 
   case numericLiteral(NumericLiteral)
   case stringLiteral(StringLiteral)
+  case binaryExpression(BinaryExpression)
 }
 
 extension Expression: Encodable {
@@ -57,6 +71,8 @@ extension Expression: Encodable {
           try node.encode(to: encoder)
       case .stringLiteral(let node):
           try node.encode(to: encoder)
+      case .binaryExpression(let node):
+        try node.encode(to: encoder)
       }
   }
 }
@@ -92,4 +108,35 @@ enum Statement: ASTNode {
 struct Program: ASTNode {
   let type = "Program"
   let body: [Statement]
+}
+
+// MARK: DEBUG
+
+extension Program: CustomStringConvertible {
+  var description: String {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+    do {
+      let data = try encoder.encode(self)
+      return String(data: data, encoding: .utf8) ?? "{}"
+    } catch {
+      return #"{"error":"Failed to encode AST"}"#
+    }
+  }
+}
+
+// MARK: Codable
+
+extension Statement: Encodable {
+  func encode(to encoder: Encoder) throws {
+      switch self {
+      case .empty(let node):
+          try node.encode(to: encoder)
+      case .block(let node):
+          try node.encode(to: encoder)
+      case .expression(let node):
+          try node.encode(to: encoder)
+      }
+  }
 }

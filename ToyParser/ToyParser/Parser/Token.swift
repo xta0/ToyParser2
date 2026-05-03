@@ -16,6 +16,8 @@ enum TokenType {
     case COMMENT
     case COMMENT_BLOCK
     case UNKNOWN
+
+    case ADD
 }
 
 struct Token {
@@ -28,7 +30,7 @@ struct TokenSpec {
   let type: TokenType
 }
 
-struct Lexer {
+extension Token {
   static let specs: [TokenSpec] = [
     TokenSpec(regex: /^\s/, type: .BLANK),
     TokenSpec(regex: /^\/\/.*/, type: .COMMENT),
@@ -41,6 +43,9 @@ struct Lexer {
     TokenSpec(regex: /^\d+/, type: .NUMBER),
     TokenSpec(regex: /^"[^"]*"/, type: .STRING),
     TokenSpec(regex: /^'[^']*'/, type: .STRING),
+
+    // math ops: +, -
+    TokenSpec(regex: /^[+\-]/, type: .ADD)
   ]
 }
 
