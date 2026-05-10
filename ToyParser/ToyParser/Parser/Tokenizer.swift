@@ -1,5 +1,5 @@
 //
-//  tokenizer.swift
+//  Tokenizer.swift
 //  ToyParser
 //
 //  Created by Tao Xu on 1/2/25.
@@ -8,14 +8,14 @@
 import Foundation
 
 final class Tokenizer {
-  private var input: String = "";
+  private var input: String = ""
   private var cursor: String.Index!
 
-  init () {}
+  init() {}
 
   func initialize(_ input: String) {
     self.input = input
-    self.cursor = input.startIndex
+    cursor = input.startIndex
   }
 
   func isEOF() -> Bool {
@@ -41,7 +41,7 @@ final class Tokenizer {
     for spec in Token.specs {
       if let tokenValue = match(spec.regex, in: remaining) {
         // advance the curor
-        cursor = self.input.index(cursor, offsetBy: tokenValue.count)
+        cursor = input.index(cursor, offsetBy: tokenValue.count)
 
         print("[Tokenizer] matched: \(tokenValue)")
 
@@ -61,14 +61,12 @@ final class Tokenizer {
     throw .unexpectedToken(String(remaining.prefix(1)))
   }
 
-
   private func match(_ regex: Regex<Substring>, in input: String) -> String? {
     // eager matching: return the first match result
     guard let result = input.firstMatch(of: regex) else {
       return nil
     }
-    let matched = String(result.output)
-    return matched
+    return String(result.output)
   }
 
   private func cursorPosition() -> Int {
