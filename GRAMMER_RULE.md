@@ -53,6 +53,26 @@ UNARY:       !
 Token order matters for unary and equality: `!=` must be checked before `!`.
 Otherwise `!=` would be split as `!` plus `=`.
 
+Current keyword tokens:
+
+```text
+let
+if
+else
+true
+false
+null
+while
+for
+do
+def
+return
+```
+
+Keyword regexes require a trailing word boundary, so an identifier like
+`returnValue` stays one identifier token instead of being split into `return`
+plus `Value`.
+
 ## AST Node Model
 
 Concrete AST payloads conform to `ASTNode`. Wrapper enums choose between
@@ -67,6 +87,10 @@ BlockStatement
 ExpressionStatement
 VariableStatement
 IFStatement
+WhileIterationStatement
+ForIterationStatement
+FunctionDeclarationStatement
+ReturnStatement
 VariableDeclaration
 ```
 
@@ -93,6 +117,9 @@ Statement.Block(BlockStatement)
 Statement.Expression(ExpressionStatement)
 Statement.Variable(VariableStatement)
 Statement.If(IFStatement)
+Statement.Iteration(IterationStatement)
+Statement.Function(FunctionDeclarationStatement)
+Statement.Return(ReturnStatement)
 ```
 
 `Expression` is also an enum wrapper, but it currently conforms to `ASTNode`
@@ -147,17 +174,23 @@ Statement
   | ExpressionStatement
   | VariableStatement
   | IfStatement
+  | IterationStatement
+  | FunctionDeclaration
+  | ReturnStatement
   ;
 ```
 
 `statementBuilder()` chooses the concrete statement from `lookahead`:
 
 ```text
-;       -> EmptyStatement
-{       -> BlockStatement
-let     -> VariableStatement
-if      -> IfStatement
-default -> ExpressionStatement
+;                 -> EmptyStatement
+{                 -> BlockStatement
+let               -> VariableStatement
+if                -> IfStatement
+while / do / for  -> IterationStatement
+def               -> FunctionDeclaration
+return            -> ReturnStatement
+default           -> ExpressionStatement
 ```
 
 ### EmptyStatement
@@ -215,7 +248,8 @@ a && b;
 ```
 
 Expression statements are the fallback statement kind. If the parser does not
-see `;`, `{`, `let`, or `if`, it assumes the statement starts with an expression.
+see a token that starts one of the known statement forms, it assumes the
+statement starts with an expression.
 
 ### VariableStatement
 
@@ -279,6 +313,134 @@ if (x) { y; } else { z; }
 The current parser requires both `ifBody` and `elseBody` to be block statements.
 The condition is parsed with `expressionBuilder()`, so it supports the full
 expression grammar.
+
+### IterationStatement
+
+```text
+IterationStatement
+  : WhileStatement
+  | DoWhileStatement
+  | ForStatement
+  ;
+```
+
+Examples:
+
+```text
+while (x) {}
+do {} while (x);
+for (let i = 0; i < 10; i = i + 1) {}
+```
+
+`iterationStatementBuilder()` routes by keyword. All loop bodies are currently
+parsed as block statements.
+
+### WhileStatement
+
+```text
+WhileStatement
+  : KEYWORD("while") LEFT_BRACE Expression RIGHT_BRACE BlockStatement
+  ;
+```
+
+Examples:
+
+```text
+while (x) {}
+while (x < 10) { x = x + 1; }
+```
+
+The condition delegates to `expressionBuilder()`, so it supports the full
+expression grammar.
+
+### DoWhileStatement
+
+```text
+DoWhileStatement
+  : KEYWORD("do") BlockStatement KEYWORD("while") LEFT_BRACE Expression RIGHT_BRACE SEMICOLON
+  ;
+```
+
+Examples:
+
+```text
+do {} while (x);
+do { x = x + 1; } while (x < 10);
+```
+
+The current AST stores `do while` in the same `WhileIterationStatement` payload
+as `while`. That is enough for parsing the condition and body, but an
+interpreter may eventually need a distinct do-while node because `do while`
+executes the body before checking the condition.
+
+### ForStatement
+
+```text
+ForStatement
+  : KEYWORD("for") LEFT_BRACE ForStatementInit? SEMICOLON Expression? SEMICOLON Expression? RIGHT_BRACE BlockStatement
+  ;
+
+ForStatementInit
+  : VariableStatementInit
+  | Expression
+  ;
+```
+
+Examples:
+
+```text
+for (;;) {}
+for (let i = 0; i < 10; i = i + 1) {}
+for (i = 0; i < 10; i = i + 1) {}
+for (; i < 10; i = i + 1) {}
+```
+
+The initializer is separate from the condition and update because it may be
+either a variable declaration or an expression. The condition and update are
+ordinary expressions.
+
+### FunctionDeclaration
+
+```text
+FunctionDeclaration
+  : KEYWORD("def") Identifier LEFT_BRACE FormalParameterList? RIGHT_BRACE BlockStatement
+  ;
+
+FormalParameterList
+  : Identifier
+  | FormalParameterList COMMA Identifier
+  ;
+```
+
+Examples:
+
+```text
+def noop() {}
+def add(x, y) { return x + y; }
+```
+
+Function declarations are statements. The parser records the function name,
+parameter names, and block body. Function calls are not part of the expression
+grammar yet.
+
+### ReturnStatement
+
+```text
+ReturnStatement
+  : KEYWORD("return") Expression? SEMICOLON
+  ;
+```
+
+Examples:
+
+```text
+return;
+return x + 1;
+```
+
+The parser allows a return statement wherever statements are allowed. Whether
+`return` is only valid inside a function is a later semantic/interpreter check,
+not a syntax check in the current parser.
 
 ## Expression Delegation And Precedence
 
@@ -708,6 +870,26 @@ parse
          │  ├─ expressionBuilder
          │  ├─ blockStatementBuilder
          │  └─ blockStatementBuilder optional else
+         ├─ iterationStatementBuilder
+         │  ├─ whileStatement
+         │  │  ├─ expressionBuilder
+         │  │  └─ blockStatementBuilder
+         │  ├─ doWhileStatement
+         │  │  ├─ blockStatementBuilder
+         │  │  └─ expressionBuilder
+         │  └─ forStatement
+         │     ├─ forStatementInit optional
+         │     │  ├─ variableStatementInitBuilder
+         │     │  └─ expressionBuilder
+         │     ├─ expressionBuilder optional condition
+         │     ├─ expressionBuilder optional update
+         │     └─ blockStatementBuilder
+         ├─ functionDeclarationBuilder
+         │  ├─ identifierBuilder
+         │  ├─ formalParameterListBuilder optional
+         │  └─ blockStatementBuilder
+         ├─ returnStatementBuilder
+         │  └─ expressionBuilder optional
          └─ expressionStatementBuilder
             └─ expressionBuilder
 ```
@@ -745,6 +927,7 @@ AdditiveExpression       + -
 MultiplicativeExpression * /
 StatementList
 VariableDeclarationList
+FormalParameterList
 ```
 
 Current right-associative level:
@@ -866,3 +1049,6 @@ are not implemented yet:
 
 If those are added later, decide whether they are plain unary operators or a
 separate update-expression level before changing the precedence chain.
+
+Function declarations are parsed, but the language does not yet have function
+call expressions, scope binding, or return execution semantics.

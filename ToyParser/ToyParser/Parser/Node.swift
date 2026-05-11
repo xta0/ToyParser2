@@ -13,11 +13,21 @@
 // ├─ BlockStatement
 // ├─ ExpressionStatement
 // ├─ VariableStatement
+// ├─ IFStatement
+// ├─ WhileIterationStatement
+// ├─ ForIterationStatement
+// ├─ FunctionDeclarationStatement
+// ├─ ReturnStatement
+// ├─ VariableDeclaration
 // └─ Expression
 //    ├─ NumericLiteral
 //    ├─ StringLiteral
+//    ├─ BooleanLiteral
+//    ├─ NullLiteral
 //    ├─ IdentifierExpression
 //    ├─ BinaryExpression
+//    ├─ LogicalExpression
+//    ├─ UnaryExpression
 //    └─ AssignmentExpression
 //
 // Statement is a wrapper over statement node variants, not a concrete ASTNode.
@@ -173,6 +183,8 @@ enum Statement: Encodable {
     case let .Variable(vs): return vs.type
     case let .If(s): return s.type
     case let .Iteration(s): return s.type
+    case let .Function(f): return f.type
+    case let .Return(r): return r.type
     }
   }
 
@@ -182,6 +194,8 @@ enum Statement: Encodable {
   case Variable(VariableStatement)
   case If(IFStatement)
   case Iteration(IterationStatement)
+  case Function(FunctionDeclarationStatement)
+  case Return(ReturnStatement)
 }
 
 
@@ -241,6 +255,19 @@ struct ForIterationStatement: ASTNode, Encodable {
   let cond: Expression?
   let update: Expression?
   let body: BlockStatement
+}
+
+
+struct FunctionDeclarationStatement: ASTNode, Encodable {
+  let type = "FunctionDeclaration"
+  let name: String
+  let params: [String]
+  let body: BlockStatement
+}
+
+struct ReturnStatement: ASTNode, Encodable {
+  let type = "ReturnStatement"
+  let value: Expression?
 }
 
 // MARK: Program

@@ -80,7 +80,47 @@ private struct ASTPrinter {
         to: &lines,
         prefix: childPrefix(prefix, isLast: isLast)
       )
+    case let .Function(functionStatement):
+      appendFunctionDeclaration(
+        functionStatement,
+        to: &lines,
+        prefix: childPrefix(prefix, isLast: isLast)
+      )
+    case let .Return(returnStatement):
+      appendReturnStatement(
+        returnStatement,
+        to: &lines,
+        prefix: childPrefix(prefix, isLast: isLast)
+      )
     }
+  }
+
+  private func appendFunctionDeclaration(
+    _ statement: FunctionDeclarationStatement,
+    to lines: inout [String],
+    prefix: String
+  ) {
+    if !statement.params.isEmpty {
+      lines.append("\(prefix)├─ Params")
+      for (index, param) in statement.params.enumerated() {
+        lines.append("\(prefix)│  \(branch(index == statement.params.count - 1))Param \(param)")
+      }
+    }
+
+    lines.append("\(prefix)└─ Body")
+    appendStatements(statement.body.body, to: &lines, prefix: "\(prefix)   ")
+  }
+
+  private func appendReturnStatement(
+    _ statement: ReturnStatement,
+    to lines: inout [String],
+    prefix: String
+  ) {
+    guard let value = statement.value else {
+      return
+    }
+
+    appendExpression(value, to: &lines, prefix: prefix, isLast: true)
   }
 
   private func appendIterationStatement(_ statement: IterationStatement, to lines: inout [String], prefix: String) {
@@ -215,6 +255,10 @@ private struct ASTPrinter {
       return "IFStatement"
     case .Iteration:
       return "IterationStatement"
+    case let .Function(function):
+      return "FunctionDeclaration \(function.name)"
+    case .Return:
+      return "ReturnStatement"
     }
   }
 

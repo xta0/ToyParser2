@@ -148,6 +148,50 @@ struct ToyParserTests {
     #expect(try numericValue(initializer.right) == 42)
   }
 
+  @Test func parsesFunctionDeclarationWithoutParameters() throws {
+    let program = try parseProgram("def noop() {}")
+
+    #expect(program.body.count == 1)
+    let function = try functionDeclarationStatement(program.body[0])
+
+    #expect(function.name == "noop")
+    #expect(function.params.isEmpty)
+    #expect(function.body.body.isEmpty)
+  }
+
+  @Test func parsesFunctionDeclarationWithParametersAndReturn() throws {
+    let program = try parseProgram("def add(x, y) { return x + y; }")
+
+    #expect(program.body.count == 1)
+    let function = try functionDeclarationStatement(program.body[0])
+
+    #expect(function.name == "add")
+    #expect(function.params == ["x", "y"])
+    #expect(function.body.body.count == 1)
+
+    let returnStatement = try returnStatement(function.body.body[0])
+    let returnedValue = try #require(returnStatement.value)
+    let binary = try binaryExpression(returnedValue)
+    #expect(binary.operatorValue == "+")
+    #expect(try identifierValue(binary.left) == "x")
+    #expect(try identifierValue(binary.right) == "y")
+  }
+
+  @Test func parsesReturnStatementWithoutValue() throws {
+    let program = try parseProgram("return;")
+
+    #expect(program.body.count == 1)
+    let statement = try returnStatement(program.body[0])
+    #expect(statement.value == nil)
+  }
+
+  @Test func parsesKeywordPrefixAsIdentifier() throws {
+    let program = try parseProgram("returnValue;")
+
+    #expect(program.body.count == 1)
+    #expect(try identifierValue(expressionStatementValue(program.body[0])) == "returnValue")
+  }
+
   @Test func parsesEmptyBlockStatement() throws {
     let program = try parseProgram("{}")
 
@@ -224,6 +268,108 @@ struct ToyParserTests {
     #expect(initializer.operatorValue == "=")
     #expect(try identifierValue(initializer.left) == "i")
     #expect(try numericValue(initializer.right) == 0)
+  }
+
+  @Test func parsesWhileStatement() throws {
+    let program = try parseProgram("while (x < 10) { x = x + 1; }")
+
+    #expect(program.body.count == 1)
+    let whileStatement = try whileIterationStatement(program.body[0])
+
+    let condition = try binaryExpression(whileStatement.condition)
+    #expect(condition.operatorValue == "<")
+    #expect(try identifierValue(condition.left) == "x")
+    #expect(try numericValue(condition.right) == 10)
+
+    #expect(whileStatement.body.body.count == 1)
+    let bodyExpression = try expressionStatementValue(whileStatement.body.body[0])
+    let assignment = try assignmentExpression(bodyExpression)
+    #expect(assignment.operatorValue == "=")
+    #expect(try identifierValue(assignment.left) == "x")
+  }
+
+  @Test func parsesDoWhileStatement() throws {
+    let program = try parseProgram("do { x = x + 1; } while (x < 10);")
+
+    #expect(program.body.count == 1)
+    let doWhileStatement = try whileIterationStatement(program.body[0])
+
+    #expect(doWhileStatement.body.body.count == 1)
+    let bodyExpression = try expressionStatementValue(doWhileStatement.body.body[0])
+    let assignment = try assignmentExpression(bodyExpression)
+    #expect(assignment.operatorValue == "=")
+    #expect(try identifierValue(assignment.left) == "x")
+
+    let condition = try binaryExpression(doWhileStatement.condition)
+    #expect(condition.operatorValue == "<")
+    #expect(try identifierValue(condition.left) == "x")
+    #expect(try numericValue(condition.right) == 10)
+  }
+
+  @Test func parsesForStatementWithEmptyClauses() throws {
+    let program = try parseProgram("for (;;) {}")
+
+    #expect(program.body.count == 1)
+    let forStatement = try forIterationStatement(program.body[0])
+
+    #expect(forStatement.start == nil)
+    #expect(forStatement.cond == nil)
+    #expect(forStatement.update == nil)
+    #expect(forStatement.body.body.isEmpty)
+  }
+
+  @Test func parsesForStatementWithOmittedClauses() throws {
+    let program = try parseProgram("for (; i < 10; i = i + 1) { x; }")
+
+    #expect(program.body.count == 1)
+    let forStatement = try forIterationStatement(program.body[0])
+
+    #expect(forStatement.start == nil)
+
+    let condition = try binaryExpression(#require(forStatement.cond))
+    #expect(condition.operatorValue == "<")
+    #expect(try identifierValue(condition.left) == "i")
+    #expect(try numericValue(condition.right) == 10)
+
+    let update = try assignmentExpression(#require(forStatement.update))
+    #expect(update.operatorValue == "=")
+    #expect(try identifierValue(update.left) == "i")
+
+    #expect(forStatement.body.body.count == 1)
+    #expect(try identifierValue(expressionStatementValue(forStatement.body.body[0])) == "x")
+  }
+
+  @Test func parsesForStatementWithOnlyUpdateClause() throws {
+    let program = try parseProgram("for (;; i = i + 1) {}")
+
+    #expect(program.body.count == 1)
+    let forStatement = try forIterationStatement(program.body[0])
+
+    #expect(forStatement.start == nil)
+    #expect(forStatement.cond == nil)
+
+    let update = try assignmentExpression(#require(forStatement.update))
+    #expect(update.operatorValue == "=")
+    #expect(try identifierValue(update.left) == "i")
+    #expect(forStatement.body.body.isEmpty)
+  }
+
+  @Test func printsIterationStatementTree() throws {
+    let program = try parseProgram("while (x) { x = 1; }")
+
+    let expectedTree = """
+    Program
+    └─ IterationStatement
+       ├─ Condition
+       │  └─ IdentifierExpression x
+       └─ Body
+          └─ ExpressionStatement
+             └─ AssignmentExpression (=)
+                ├─ IdentifierExpression x
+                └─ NumericLiteral 1
+    """
+
+    #expect(program.treeDescription == expectedTree)
   }
 
   @Test func skipsWhitespaceAndComments() throws {
@@ -656,6 +802,25 @@ struct ToyParserTests {
     #expect(program.treeDescription == expectedTree)
   }
 
+  @Test func printsFunctionDeclarationTree() throws {
+    let program = try parseProgram("def add(x, y) { return x + y; }")
+
+    let expectedTree = """
+    Program
+    └─ FunctionDeclaration add
+       ├─ Params
+       │  ├─ Param x
+       │  └─ Param y
+       └─ Body
+          └─ ReturnStatement
+             └─ BinaryExpression (+)
+                ├─ IdentifierExpression x
+                └─ IdentifierExpression y
+    """
+
+    #expect(program.treeDescription == expectedTree)
+  }
+
   @Test func parseFailsForMissingSemicolon() throws {
     let parser = Parser()
 
@@ -718,6 +883,24 @@ private func variableStatement(_ statement: Statement) throws -> VariableStateme
   return variableStatement
 }
 
+private func functionDeclarationStatement(_ statement: Statement) throws -> FunctionDeclarationStatement {
+  guard case let .Function(functionStatement) = statement else {
+    Issue.record("Expected FunctionDeclaration")
+    throw TestFailure()
+  }
+
+  return functionStatement
+}
+
+private func returnStatement(_ statement: Statement) throws -> ReturnStatement {
+  guard case let .Return(returnStatement) = statement else {
+    Issue.record("Expected ReturnStatement")
+    throw TestFailure()
+  }
+
+  return returnStatement
+}
+
 private func iterationStatement(_ statement: Statement) throws -> IterationStatement {
   guard case let .Iteration(iterationStatement) = statement else {
     Issue.record("Expected IterationStatement")
@@ -734,6 +917,15 @@ private func forIterationStatement(_ statement: Statement) throws -> ForIteratio
   }
 
   return forStatement
+}
+
+private func whileIterationStatement(_ statement: Statement) throws -> WhileIterationStatement {
+  guard case let .whileLoop(whileStatement) = try iterationStatement(statement) else {
+    Issue.record("Expected WhileStatement")
+    throw TestFailure()
+  }
+
+  return whileStatement
 }
 
 private func binaryExpression(_ expression: Expression) throws -> BinaryExpression {

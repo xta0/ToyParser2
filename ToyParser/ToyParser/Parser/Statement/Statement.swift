@@ -38,6 +38,8 @@ extension Parser {
   //   | VariableStatement
   //   | IfStatement
   //   | IterationStatement
+  //   | FunctionDeclaration
+  //   | ReturnStatement
   //   ;
   //
   // Examples:
@@ -47,6 +49,8 @@ extension Parser {
   // `if (x) {}`
   // `while (x) {}`
   // `for (;;) {}`
+  // `def add(x, y) { return x + y; }`
+  // `return x;`
   // `x + 1;`
   func statementBuilder() throws -> Statement {
     guard let lookahead else {
@@ -61,6 +65,10 @@ extension Parser {
       return try .Variable(variableStatementBuilder())
     case .KEYWORD(keyword: "if"):
       return try .If(ifStatementBuilder())
+    case .KEYWORD(keyword: "def"):
+      return try .Function(functionDeclarationBuilder())
+    case .KEYWORD(keyword: "return"):
+      return try .Return(returnStatementBuilder())
     case .KEYWORD(keyword: "while"),
          .KEYWORD(keyword: "do"),
          .KEYWORD(keyword: "for"):

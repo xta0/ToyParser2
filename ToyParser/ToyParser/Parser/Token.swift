@@ -136,15 +136,19 @@ extension Token {
     TokenSpec(regex: /^[*\/]/, type: .MUL),
 
     // keywords:
-    TokenSpec(regex: /^\blet/, type: .KEYWORD(keyword: "let")),
-    TokenSpec(regex: /^\bif/, type: .KEYWORD(keyword: "if")),
-    TokenSpec(regex: /^\belse/, type: .KEYWORD(keyword: "else")),
-    TokenSpec(regex: /^\btrue/, type: .KEYWORD(keyword: "true")),
-    TokenSpec(regex: /^\bfalse/, type: .KEYWORD(keyword: "false")),
-    TokenSpec(regex: /^\bnull/, type: .KEYWORD(keyword: "null")),
-    TokenSpec(regex: /^\bwhile/, type: .KEYWORD(keyword: "while")),
-    TokenSpec(regex: /^\bfor/, type: .KEYWORD(keyword: "for")),
-    TokenSpec(regex: /^\bdo/, type: .KEYWORD(keyword: "do")),
+    // trailing word boundaries keep identifiers like `returnValue` from being
+    // split into `return` plus `Value`.
+    TokenSpec(regex: /^\blet\b/, type: .KEYWORD(keyword: "let")),
+    TokenSpec(regex: /^\bif\b/, type: .KEYWORD(keyword: "if")),
+    TokenSpec(regex: /^\belse\b/, type: .KEYWORD(keyword: "else")),
+    TokenSpec(regex: /^\btrue\b/, type: .KEYWORD(keyword: "true")),
+    TokenSpec(regex: /^\bfalse\b/, type: .KEYWORD(keyword: "false")),
+    TokenSpec(regex: /^\bnull\b/, type: .KEYWORD(keyword: "null")),
+    TokenSpec(regex: /^\bwhile\b/, type: .KEYWORD(keyword: "while")),
+    TokenSpec(regex: /^\bfor\b/, type: .KEYWORD(keyword: "for")),
+    TokenSpec(regex: /^\bdo\b/, type: .KEYWORD(keyword: "do")),
+    TokenSpec(regex: /^\bdef\b/, type: .KEYWORD(keyword: "def")),
+    TokenSpec(regex: /^\breturn\b/, type: .KEYWORD(keyword: "return")),
 
     // identifiers (needs to checked after number):
     TokenSpec(regex: /^\w+/, type: .IDENTIFIER),
