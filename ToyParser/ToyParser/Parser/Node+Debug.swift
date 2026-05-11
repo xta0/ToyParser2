@@ -51,24 +51,91 @@ private struct ASTPrinter {
     lines.append("\(prefix)\(branch(isLast))\(label(for: statement))")
 
     switch statement {
-    case .empty:
+    case .Empty:
       return
-    case let .block(block):
+    case let .Block(block):
       appendStatements(block.body, to: &lines, prefix: childPrefix(prefix, isLast: isLast))
-    case let .expression(expressionStatement):
+    case let .Expression(expressionStatement):
       appendExpression(
         expressionStatement.value,
         to: &lines,
         prefix: childPrefix(prefix, isLast: isLast),
         isLast: true
       )
-    case let .variable(variableStatement):
+    case let .Variable(variableStatement):
       appendVariableStatement(
         variableStatement,
         to: &lines,
         prefix: childPrefix(prefix, isLast: isLast)
       )
+    case let .If(ifStatement):
+      appendIfStatement(
+        ifStatement,
+        to: &lines,
+        prefix: childPrefix(prefix, isLast: isLast)
+      )
+    case let .Iteration(iterationStatement):
+      appendIterationStatement(
+        iterationStatement,
+        to: &lines,
+        prefix: childPrefix(prefix, isLast: isLast)
+      )
     }
+  }
+
+  private func appendIterationStatement(_ statement: IterationStatement, to lines: inout [String], prefix: String) {
+    switch statement {
+    case let .whileLoop(whileStatement):
+      lines.append("\(prefix)├─ Condition")
+      appendExpression(whileStatement.condition, to: &lines, prefix: "\(prefix)│  ", isLast: true)
+      lines.append("\(prefix)└─ Body")
+      appendStatements(whileStatement.body.body, to: &lines, prefix: "\(prefix)   ")
+    case let .forLoop(forStatement):
+      appendForStatement(forStatement, to: &lines, prefix: prefix)
+    }
+  }
+
+  private func appendForStatement(_ statement: ForIterationStatement, to lines: inout [String], prefix: String) {
+    if let start = statement.start {
+      lines.append("\(prefix)├─ Start")
+      appendForStatementInit(start, to: &lines, prefix: "\(prefix)│  ")
+    }
+
+    if let cond = statement.cond {
+      lines.append("\(prefix)├─ Condition")
+      appendExpression(cond, to: &lines, prefix: "\(prefix)│  ", isLast: true)
+    }
+
+    if let update = statement.update {
+      lines.append("\(prefix)├─ Update")
+      appendExpression(update, to: &lines, prefix: "\(prefix)│  ", isLast: true)
+    }
+
+    lines.append("\(prefix)└─ Body")
+    appendStatements(statement.body.body, to: &lines, prefix: "\(prefix)   ")
+  }
+
+  private func appendForStatementInit(_ initNode: ForStatementInit, to lines: inout [String], prefix: String) {
+    switch initNode {
+    case let .variable(statement):
+      appendVariableStatement(statement, to: &lines, prefix: prefix)
+    case let .expression(expression):
+      appendExpression(expression, to: &lines, prefix: prefix, isLast: true)
+    }
+  }
+
+  private func appendIfStatement(_ statement: IFStatement, to lines: inout [String], prefix: String) {
+    lines.append("\(prefix)├─ Condition")
+    appendExpression(statement.condition, to: &lines, prefix: "\(prefix)│  ", isLast: true)
+    lines.append("\(prefix)├─ IfBody")
+    appendStatements(statement.ifBody.body, to: &lines, prefix: "\(prefix)│  ")
+
+    guard let elseBody = statement.elseBody else {
+      return
+    }
+
+    lines.append("\(prefix)└─ ElseBody")
+    appendStatements(elseBody.body, to: &lines, prefix: "\(prefix)   ")
   }
 
   private func appendVariableStatement(_ statement: VariableStatement, to lines: inout [String], prefix: String) {
@@ -114,6 +181,17 @@ private struct ASTPrinter {
     case let .assignmentExpression(node):
       left = node.left
       right = node.right
+    case let .logicalExpression(node):
+      left = node.left
+      right = node.right
+    case let .unaryExpression(node):
+      appendExpression(
+        node.argument,
+        to: &lines,
+        prefix: childPrefix(prefix, isLast: isLast),
+        isLast: true
+      )
+      return
     default:
       return
     }
@@ -125,14 +203,18 @@ private struct ASTPrinter {
 
   private func label(for statement: Statement) -> String {
     switch statement {
-    case .empty:
+    case .Empty:
       return "EmptyStatement"
-    case .block:
+    case .Block:
       return "BlockStatement"
-    case .expression:
+    case .Expression:
       return "ExpressionStatement"
-    case .variable:
+    case .Variable:
       return "VariableStatement"
+    case .If:
+      return "IFStatement"
+    case .Iteration:
+      return "IterationStatement"
     }
   }
 
@@ -148,6 +230,14 @@ private struct ASTPrinter {
       return "AssignmentExpression (\(node.operatorValue))"
     case let .identifierExpression(node):
       return "IdentifierExpression \(node.value)"
+    case let .booleanLiteral(node):
+      return "BooleanLiteral \(node.value)"
+    case .nullLiteral:
+      return "NullLiteral"
+    case let .logicalExpression(node):
+      return "LogicalExpression (\(node.operatorValue))"
+    case let .unaryExpression(node):
+      return "UnaryExpression (\(node.operatorValue))"
     }
   }
 

@@ -11,6 +11,10 @@ extension Parser {
   //   | StatementList Statement
   //   ;
   //
+  // Examples:
+  // `1;`
+  // `1; 2; let x = 3;`
+  //
   // A StatementList is parsed with a loop because direct left recursion does
   // not terminate in recursive descent parsers.
   func statementListBuilder(stopTokenType: TokenType? = nil) throws -> [Statement] {
@@ -32,24 +36,37 @@ extension Parser {
   //   | BlockStatement
   //   | EmptyStatement
   //   | VariableStatement
+  //   | IfStatement
+  //   | IterationStatement
   //   ;
+  //
+  // Examples:
+  // `;`
+  // `{ 1; }`
+  // `let x = 1;`
+  // `if (x) {}`
+  // `while (x) {}`
+  // `for (;;) {}`
+  // `x + 1;`
   func statementBuilder() throws -> Statement {
     guard let lookahead else {
       throw ParserError.unexpectedLiteralProduction
     }
-
     switch lookahead.type {
     case .SEMICOLON:
-      return try .empty(emptyStatementBuilder())
+      return try .Empty(emptyStatementBuilder())
     case .LEFT_CURLY_BRACE:
-      return try .block(blockStatementBuilder())
-    case let .KEYWORD(kwd):
-      if kwd == "let" {
-        return try .variable(variableStatementBuilder())
-      }
-      throw ParserError.unexpectedKeyword(keyword: kwd)
+      return try .Block(blockStatementBuilder())
+    case .KEYWORD(keyword: "let"):
+      return try .Variable(variableStatementBuilder())
+    case .KEYWORD(keyword: "if"):
+      return try .If(ifStatementBuilder())
+    case .KEYWORD(keyword: "while"),
+         .KEYWORD(keyword: "do"),
+         .KEYWORD(keyword: "for"):
+      return try .Iteration(iterationStatementBuilder())
     default:
-      return try .expression(expressionStatementBuilder())
+      return try .Expression(expressionStatementBuilder())
     }
   }
 }

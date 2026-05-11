@@ -13,6 +13,11 @@ extension Parser {
   //   | AdditiveExpression ADD MultiplicativeExpression
   //   ;
   //
+  // Examples:
+  // `1`
+  // `1 + 2`
+  // `1 + 2 - 3`
+  //
   // Left recursive:
   //
   // AdditiveExpression → AdditiveExpression ADD MultiplicativeExpression
@@ -20,22 +25,29 @@ extension Parser {
   // MultiplicativeExpression ADD MultiplicativeExpression ADD MultiplicativeExpression
   // ...
   func additiveExpressionBuilder() throws -> Expression {
+    // fallback to multiplacationExp
     try binaryExpressionBuilder(.ADD, operand: multiplicativeExpressionBuilder)
   }
 
   // MultiplicativeExpression
-  //   : PrimaryExpression
-  //   | MultiplicativeExpression MUL PrimaryExpression
+  //   : UnaryExpression
+  //   | MultiplicativeExpression MUL UnaryExpression
   //   ;
+  //
+  // Examples:
+  // `x`
+  // `2 * 3`
+  // `8 / 4 * 2`
   //
   // Left recursive:
   //
-  // MultiplicativeExpression → MultiplicativeExpression MUL PrimaryExpression
-  // PrimaryExpression MUL PrimaryExpression
-  // PrimaryExpression MUL PrimaryExpression MUL PrimaryExpression
+  // MultiplicativeExpression → MultiplicativeExpression MUL UnaryExpression
+  // UnaryExpression MUL UnaryExpression
+  // UnaryExpression MUL UnaryExpression MUL UnaryExpression
   // ...
   func multiplicativeExpressionBuilder() throws -> Expression {
-    try binaryExpressionBuilder(.MUL, operand: primaryExpressionBuilder)
+    // fallback to unaryExp
+    try binaryExpressionBuilder(.MUL, operand: unaryExpressionBuilder)
   }
 }
 

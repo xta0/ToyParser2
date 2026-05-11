@@ -51,11 +51,32 @@ struct ToyParserTests {
     #expect(node.value == "hello")
   }
 
+  @Test func parsesTrueLiteralExpressionStatement() throws {
+    let program = try parseProgram("true;")
+
+    #expect(program.body.count == 1)
+    #expect(try booleanValue(expressionStatementValue(program.body[0])) == true)
+  }
+
+  @Test func parsesFalseLiteralExpressionStatement() throws {
+    let program = try parseProgram("false;")
+
+    #expect(program.body.count == 1)
+    #expect(try booleanValue(expressionStatementValue(program.body[0])) == false)
+  }
+
+  @Test func parsesNullLiteralExpressionStatement() throws {
+    let program = try parseProgram("null;")
+
+    #expect(program.body.count == 1)
+    try requireNullLiteral(expressionStatementValue(program.body[0]))
+  }
+
   @Test func parsesEmptyStatement() throws {
     let program = try parseProgram(";")
 
     #expect(program.body.count == 1)
-    guard case .empty = program.body[0] else {
+    guard case .Empty = program.body[0] else {
       Issue.record("Expected EmptyStatement")
       return
     }
@@ -68,7 +89,7 @@ struct ToyParserTests {
     #expect(try numericValue(program.body[0]) == 42)
     #expect(try stringValue(program.body[1]) == "hello")
 
-    guard case .empty = program.body[2] else {
+    guard case .Empty = program.body[2] else {
       Issue.record("Expected third statement to be EmptyStatement")
       return
     }
@@ -145,7 +166,7 @@ struct ToyParserTests {
     #expect(try numericValue(block.body[0]) == 1)
     #expect(try stringValue(block.body[1]) == "two")
 
-    guard case .empty = block.body[2] else {
+    guard case .Empty = block.body[2] else {
       Issue.record("Expected third block statement to be EmptyStatement")
       return
     }
@@ -161,6 +182,48 @@ struct ToyParserTests {
     let innerBlock = try blockStatement(outerBlock.body[0])
     #expect(innerBlock.body.count == 1)
     #expect(try numericValue(innerBlock.body[0]) == 7)
+  }
+
+  @Test func parsesForStatementWithVariableInitializer() throws {
+    let program = try parseProgram("for (let i = 0; i < 10; i = i + 1) {}")
+
+    #expect(program.body.count == 1)
+    let forStatement = try forIterationStatement(program.body[0])
+
+    guard case let .variable(variable) = try #require(forStatement.start) else {
+      Issue.record("Expected variable for-statement initializer")
+      throw TestFailure()
+    }
+
+    #expect(variable.declarations.count == 1)
+    #expect(variable.declarations[0].id == "i")
+    #expect(try numericValue(#require(variable.declarations[0].initializer)) == 0)
+
+    let condition = try binaryExpression(#require(forStatement.cond))
+    #expect(condition.operatorValue == "<")
+    #expect(try identifierValue(condition.left) == "i")
+    #expect(try numericValue(condition.right) == 10)
+
+    let update = try assignmentExpression(#require(forStatement.update))
+    #expect(update.operatorValue == "=")
+    #expect(try identifierValue(update.left) == "i")
+  }
+
+  @Test func parsesForStatementWithExpressionInitializer() throws {
+    let program = try parseProgram("for (i = 0; i < 10; i = i + 1) {}")
+
+    #expect(program.body.count == 1)
+    let forStatement = try forIterationStatement(program.body[0])
+
+    guard case let .expression(expression) = try #require(forStatement.start) else {
+      Issue.record("Expected expression for-statement initializer")
+      throw TestFailure()
+    }
+
+    let initializer = try assignmentExpression(expression)
+    #expect(initializer.operatorValue == "=")
+    #expect(try identifierValue(initializer.left) == "i")
+    #expect(try numericValue(initializer.right) == 0)
   }
 
   @Test func skipsWhitespaceAndComments() throws {
@@ -273,6 +336,190 @@ struct ToyParserTests {
     #expect(left.operatorValue == "+")
     #expect(try numericValue(left.left) == 1)
     #expect(try numericValue(left.right) == 2)
+  }
+
+  @Test func parsesLogicalNotUnaryExpression() throws {
+    let program = try parseProgram("!x;")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let unary = try unaryExpression(expression)
+    #expect(unary.operatorValue == "!")
+    #expect(try identifierValue(unary.argument) == "x")
+  }
+
+  @Test func parsesUnaryExpressionBeforeMultiplicativeExpression() throws {
+    let program = try parseProgram("!x * y;")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let root = try binaryExpression(expression)
+    #expect(root.operatorValue == "*")
+    #expect(try identifierValue(root.right) == "y")
+
+    let left = try unaryExpression(root.left)
+    #expect(left.operatorValue == "!")
+    #expect(try identifierValue(left.argument) == "x")
+  }
+
+  @Test func parsesParenthesizedLogicalExpressionAsUnaryArgument() throws {
+    let program = try parseProgram("!(x && y);")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let unary = try unaryExpression(expression)
+    #expect(unary.operatorValue == "!")
+
+    let argument = try logicalExpression(unary.argument)
+    #expect(argument.operatorValue == "&&")
+    #expect(try identifierValue(argument.left) == "x")
+    #expect(try identifierValue(argument.right) == "y")
+  }
+
+  @Test func parsesRelationalOperators() throws {
+    let cases: [(source: String, operatorValue: String)] = [
+      ("1 > 2;", ">"),
+      ("1 >= 2;", ">="),
+      ("1 < 2;", "<"),
+      ("1 <= 2;", "<="),
+    ]
+
+    for testCase in cases {
+      let program = try parseProgram(testCase.source)
+      let expression = try expressionStatementValue(program.body[0])
+
+      let relational = try binaryExpression(expression)
+      #expect(relational.operatorValue == testCase.operatorValue)
+      #expect(try numericValue(relational.left) == 1)
+      #expect(try numericValue(relational.right) == 2)
+    }
+  }
+
+  @Test func parsesAdditiveExpressionBeforeRelationalExpression() throws {
+    let program = try parseProgram("x + 5 > 10;")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let relational = try binaryExpression(expression)
+    #expect(relational.operatorValue == ">")
+    #expect(try numericValue(relational.right) == 10)
+
+    let left = try binaryExpression(relational.left)
+    #expect(left.operatorValue == "+")
+    #expect(try identifierValue(left.left) == "x")
+    #expect(try numericValue(left.right) == 5)
+  }
+
+  @Test func parsesMultiplicativeExpressionBeforeRelationalExpression() throws {
+    let program = try parseProgram("1 + 2 < 3 * 4;")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let relational = try binaryExpression(expression)
+    #expect(relational.operatorValue == "<")
+
+    let left = try binaryExpression(relational.left)
+    #expect(left.operatorValue == "+")
+    #expect(try numericValue(left.left) == 1)
+    #expect(try numericValue(left.right) == 2)
+
+    let right = try binaryExpression(relational.right)
+    #expect(right.operatorValue == "*")
+    #expect(try numericValue(right.left) == 3)
+    #expect(try numericValue(right.right) == 4)
+  }
+
+  @Test func parsesRelationalExpressionOnAssignmentRightSide() throws {
+    let program = try parseProgram("x = a < b + 1;")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let assignment = try assignmentExpression(expression)
+    #expect(assignment.operatorValue == "=")
+    #expect(try identifierValue(assignment.left) == "x")
+
+    let relational = try binaryExpression(assignment.right)
+    #expect(relational.operatorValue == "<")
+    #expect(try identifierValue(relational.left) == "a")
+
+    let right = try binaryExpression(relational.right)
+    #expect(right.operatorValue == "+")
+    #expect(try identifierValue(right.left) == "b")
+    #expect(try numericValue(right.right) == 1)
+  }
+
+  @Test func parsesEqualityOperators() throws {
+    let cases: [(source: String, operatorValue: String)] = [
+      ("1 == 2;", "=="),
+      ("1 != 2;", "!="),
+    ]
+
+    for testCase in cases {
+      let program = try parseProgram(testCase.source)
+      let expression = try expressionStatementValue(program.body[0])
+
+      let equality = try binaryExpression(expression)
+      #expect(equality.operatorValue == testCase.operatorValue)
+      #expect(try numericValue(equality.left) == 1)
+      #expect(try numericValue(equality.right) == 2)
+    }
+  }
+
+  @Test func parsesEqualityExpressionLeftAssociatively() throws {
+    let program = try parseProgram("1 == 2 != 3;")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let root = try binaryExpression(expression)
+    #expect(root.operatorValue == "!=")
+    #expect(try numericValue(root.right) == 3)
+
+    let left = try binaryExpression(root.left)
+    #expect(left.operatorValue == "==")
+    #expect(try numericValue(left.left) == 1)
+    #expect(try numericValue(left.right) == 2)
+  }
+
+  @Test func parsesRelationalExpressionBeforeEqualityExpression() throws {
+    let program = try parseProgram("1 < 2 == 3 > 4;")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let equality = try binaryExpression(expression)
+    #expect(equality.operatorValue == "==")
+
+    let left = try binaryExpression(equality.left)
+    #expect(left.operatorValue == "<")
+    #expect(try numericValue(left.left) == 1)
+    #expect(try numericValue(left.right) == 2)
+
+    let right = try binaryExpression(equality.right)
+    #expect(right.operatorValue == ">")
+    #expect(try numericValue(right.left) == 3)
+    #expect(try numericValue(right.right) == 4)
+  }
+
+  @Test func parsesEqualityExpressionOnAssignmentRightSide() throws {
+    let program = try parseProgram("x = a == b < 1;")
+    let expression = try expressionStatementValue(program.body[0])
+
+    let assignment = try assignmentExpression(expression)
+    #expect(assignment.operatorValue == "=")
+    #expect(try identifierValue(assignment.left) == "x")
+
+    let equality = try binaryExpression(assignment.right)
+    #expect(equality.operatorValue == "==")
+    #expect(try identifierValue(equality.left) == "a")
+
+    let right = try binaryExpression(equality.right)
+    #expect(right.operatorValue == "<")
+    #expect(try identifierValue(right.left) == "b")
+    #expect(try numericValue(right.right) == 1)
+  }
+
+  @Test func parsesLogicalAndExpressionInVariableInitializer() throws {
+    let program = try parseProgram("let y = x && z;")
+
+    #expect(program.body.count == 1)
+    let variable = try variableStatement(program.body[0])
+    let initializer = try #require(variable.declarations[0].initializer)
+
+    let logical = try logicalExpression(initializer)
+    #expect(logical.operatorValue == "&&")
+    #expect(try identifierValue(logical.left) == "x")
+    #expect(try identifierValue(logical.right) == "z")
   }
 
   @Test func parsesSimpleAssignmentExpression() throws {
@@ -445,7 +692,7 @@ private func parseProgram(_ input: String) throws -> Program {
 }
 
 private func expressionStatementValue(_ statement: Statement) throws -> Expression {
-  guard case let .expression(expressionStatement) = statement else {
+  guard case let .Expression(expressionStatement) = statement else {
     Issue.record("Expected ExpressionStatement")
     throw TestFailure()
   }
@@ -454,7 +701,7 @@ private func expressionStatementValue(_ statement: Statement) throws -> Expressi
 }
 
 private func blockStatement(_ statement: Statement) throws -> BlockStatement {
-  guard case let .block(blockStatement) = statement else {
+  guard case let .Block(blockStatement) = statement else {
     Issue.record("Expected BlockStatement")
     throw TestFailure()
   }
@@ -463,12 +710,30 @@ private func blockStatement(_ statement: Statement) throws -> BlockStatement {
 }
 
 private func variableStatement(_ statement: Statement) throws -> VariableStatement {
-  guard case let .variable(variableStatement) = statement else {
+  guard case let .Variable(variableStatement) = statement else {
     Issue.record("Expected VariableStatement")
     throw TestFailure()
   }
 
   return variableStatement
+}
+
+private func iterationStatement(_ statement: Statement) throws -> IterationStatement {
+  guard case let .Iteration(iterationStatement) = statement else {
+    Issue.record("Expected IterationStatement")
+    throw TestFailure()
+  }
+
+  return iterationStatement
+}
+
+private func forIterationStatement(_ statement: Statement) throws -> ForIterationStatement {
+  guard case let .forLoop(forStatement) = try iterationStatement(statement) else {
+    Issue.record("Expected ForStatement")
+    throw TestFailure()
+  }
+
+  return forStatement
 }
 
 private func binaryExpression(_ expression: Expression) throws -> BinaryExpression {
@@ -487,6 +752,24 @@ private func assignmentExpression(_ expression: Expression) throws -> Assignment
   }
 
   return assignmentExpression
+}
+
+private func logicalExpression(_ expression: Expression) throws -> LogicalExpression {
+  guard case let .logicalExpression(logicalExpression) = expression else {
+    Issue.record("Expected LogicalExpression")
+    throw TestFailure()
+  }
+
+  return logicalExpression
+}
+
+private func unaryExpression(_ expression: Expression) throws -> UnaryExpression {
+  guard case let .unaryExpression(unaryExpression) = expression else {
+    Issue.record("Expected UnaryExpression")
+    throw TestFailure()
+  }
+
+  return unaryExpression
 }
 
 private func numericValue(_ statement: Statement) throws -> Double {
@@ -520,6 +803,22 @@ private func stringValue(_ statement: Statement) throws -> String {
   }
 
   return node.value
+}
+
+private func booleanValue(_ expression: Expression) throws -> Bool {
+  guard case let .booleanLiteral(node) = expression else {
+    Issue.record("Expected BooleanLiteral")
+    throw TestFailure()
+  }
+
+  return node.value
+}
+
+private func requireNullLiteral(_ expression: Expression) throws {
+  guard case .nullLiteral = expression else {
+    Issue.record("Expected NullLiteral")
+    throw TestFailure()
+  }
 }
 
 private struct TestFailure: Error {}

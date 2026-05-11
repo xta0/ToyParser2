@@ -35,6 +35,16 @@ struct StringLiteral: ASTNode, Encodable {
   let value: String
 }
 
+struct BooleanLiteral: ASTNode, Encodable {
+  let type = "BooleanLiteral"
+  let value: Bool
+}
+
+struct NullLiteral: ASTNode, Encodable {
+  let type = "NullLiteral"
+  let value: Optional<Never>
+}
+
 // MARK: Expression
 
 // an AST node that produces a value
@@ -45,20 +55,32 @@ indirect enum Expression: ASTNode {
       return num.type
     case let .stringLiteral(str):
       return str.type
+    case let .booleanLiteral(bool):
+      return bool.type
+    case let .nullLiteral(null):
+      return null.type
     case let .binaryExpression(exp):
       return exp.type
     case let .assignmentExpression(exp):
       return exp.type
     case let .identifierExpression(exp):
       return exp.type
+    case let .logicalExpression(exp):
+      return exp.type
+    case let .unaryExpression(exp):
+      return exp.type
     }
   }
 
   case numericLiteral(NumericLiteral)
   case stringLiteral(StringLiteral)
+  case booleanLiteral(BooleanLiteral)
+  case nullLiteral(NullLiteral)
   case binaryExpression(BinaryExpression)
   case assignmentExpression(AssignmentExpression)
   case identifierExpression(IdentifierExpression)
+  case logicalExpression(LogicalExpression)
+  case unaryExpression(UnaryExpression)
 }
 
 extension Expression: Encodable {
@@ -68,11 +90,19 @@ extension Expression: Encodable {
       try node.encode(to: encoder)
     case let .stringLiteral(node):
       try node.encode(to: encoder)
+    case let .booleanLiteral(node):
+      try node.encode(to: encoder)
+    case let .nullLiteral(node):
+      try node.encode(to: encoder)
     case let .binaryExpression(node):
       try node.encode(to: encoder)
     case let .assignmentExpression(node):
       try node.encode(to: encoder)
     case let .identifierExpression(node):
+      try node.encode(to: encoder)
+    case let .logicalExpression(node):
+      try node.encode(to: encoder)
+    case let .unaryExpression(node):
       try node.encode(to: encoder)
     }
   }
@@ -114,22 +144,44 @@ struct VariableDeclaration: ASTNode, Encodable {
   let initializer: Expression?
 }
 
+// MARK: Logical Expression
+
+struct LogicalExpression: ASTNode, Encodable {
+  let type = "LogicalExpression"
+  let operatorValue: String
+  let left: Expression
+  let right: Expression
+}
+
+// MARK: Unary Expression
+
+struct UnaryExpression: ASTNode, Encodable {
+  let type = "UnaryExpression"
+  let operatorValue: String
+  let argument: Expression
+
+}
+
 // MARK: Statements
 
 enum Statement: Encodable {
   var type: String {
     switch self {
-    case let .empty(es): return es.type
-    case let .block(bs): return bs.type
-    case let .expression(exps): return exps.type
-    case let .variable(vs): return vs.type
+    case let .Empty(es): return es.type
+    case let .Block(bs): return bs.type
+    case let .Expression(exps): return exps.type
+    case let .Variable(vs): return vs.type
+    case let .If(s): return s.type
+    case let .Iteration(s): return s.type
     }
   }
 
-  case empty(EmptyStatement)
-  case block(BlockStatement)
-  case expression(ExpressionStatement)
-  case variable(VariableStatement)
+  case Empty(EmptyStatement)
+  case Block(BlockStatement)
+  case Expression(ExpressionStatement)
+  case Variable(VariableStatement)
+  case If(IFStatement)
+  case Iteration(IterationStatement)
 }
 
 
@@ -150,6 +202,45 @@ struct ExpressionStatement: ASTNode, Encodable {
 struct VariableStatement: ASTNode, Encodable {
   let type = "VariableStatement"
   let declarations: [VariableDeclaration]
+}
+
+struct IFStatement: ASTNode, Encodable {
+  let type = "IFStatement"
+  let condition: Expression
+  let ifBody: BlockStatement
+  let elseBody: BlockStatement?
+}
+
+enum IterationStatement: Encodable {
+  case whileLoop(WhileIterationStatement)
+  case forLoop(ForIterationStatement)
+
+  var type: String {
+    switch self {
+    case .whileLoop: return "IterationStatement"
+    case .forLoop: return "IterationStatement"
+    }
+  }
+}
+
+enum ForStatementInit: Encodable {
+  case variable(VariableStatement)
+  case expression(Expression)
+}
+
+struct WhileIterationStatement: ASTNode, Encodable {
+  let type = "IterationStatement"
+  let condition: Expression
+  let body: BlockStatement
+
+}
+
+struct ForIterationStatement: ASTNode, Encodable {
+  let type = "ForStatement"
+  let start: ForStatementInit?
+  let cond: Expression?
+  let update: Expression?
+  let body: BlockStatement
 }
 
 // MARK: Program

@@ -14,6 +14,7 @@ enum ParserError: Error, CustomStringConvertible {
   case unexpectedBinaryOperator(actual: TokenType)
   case unexpectedAssignmentOperator
   case unexpectedKeyword(keyword: String)
+  case unexpectedIterationOperator(actual: TokenType)
 
   var description: String {
     switch self {
@@ -29,6 +30,8 @@ enum ParserError: Error, CustomStringConvertible {
       return "Unexpected assignment operator"
     case let .unexpectedKeyword(keyword: keyword):
       return "Unepected keyword: \(keyword)"
+    case let .unexpectedIterationOperator(actual: actual):
+      return "Unxpected iteration operator: \(actual)"
     }
   }
 }
